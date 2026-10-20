@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS Başlıkları
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 ⏰ *Saat:* ${time || 'Belirtilmedi'}`;
 
     if (token && chatId) {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -43,6 +43,16 @@ export default async function handler(req, res) {
           parse_mode: 'Markdown'
         })
       });
+
+      const tgData = await tgRes.json();
+
+      if (!tgRes.ok) {
+        console.error('Telegram API Error:', tgData);
+        return res.status(500).json({ 
+          success: false, 
+          message: `Telegram Hatası: ${tgData.description || 'Mesaj gönderilemedi.'}` 
+        });
+      }
     }
 
     return res.status(200).json({ 
@@ -54,4 +64,4 @@ export default async function handler(req, res) {
     console.error('API Error:', error);
     return res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
   }
-}
+};
