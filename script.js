@@ -1,7 +1,7 @@
 // ==========================================================
 // Haircraft Barber — Site Scripti
 // Navbar, reveal animasyonları, görsel fallback, galeri lightbox
-// ve randevu (demo) sistemi
+// ve randevu (Vercel API & Telegram) sistemi
 // ==========================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -47,14 +47,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Yukarı çık butonu
     if (backToTop) backToTop.classList.toggle("is-visible", y > 520);
 
-    // Hero görseli için çok hafif kaydırma parallax'ı
+    // Hero görseli için hafif kaydırma parallax'ı
     if (!prefersReducedMotion && heroFrame && y < 900) {
       heroScrollOffset = Math.min(y * 0.05, 28);
       applyHeroTransform();
     }
   }
 
-  // Scroll olayı tek bir rAF ile sınırlandırılır (performans)
   let scrollTicking = false;
   function onScroll() {
     if (scrollTicking) return;
@@ -73,7 +72,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ========================================================
   // MASAÜSTÜ: hero görseli fare tepkisi + magnetik butonlar
-  // (yalnızca hover destekleyen cihazlarda, reduced-motion kapalıyken)
   // ========================================================
 
   if (canHover && !prefersReducedMotion) {
@@ -146,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ========================================================
-  // GÖRSEL FALLBACK: eksik/kırık görselleri zarifçe gizle
+  // GÖRSEL FALLBACK
   // ========================================================
 
   function markImageBroken(img) {
@@ -162,14 +160,12 @@ document.addEventListener("DOMContentLoaded", () => {
     img.addEventListener("error", () => markImageBroken(img));
 
     if (img.complete) {
-      // Script çalışmadan önce yüklenmiş veya hata almış olabilir
       if (img.naturalWidth > 0) {
         img.classList.add("is-loaded");
       } else {
         markImageBroken(img);
       }
     } else {
-      // Yüklenirken hafif blur, yüklenince netleşme
       img.classList.add("is-loading");
       img.addEventListener("load", () => {
         img.classList.remove("is-loading");
@@ -179,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ========================================================
-  // REVEAL: içerik ekrana girince yumuşak geçiş
+  // REVEAL
   // ========================================================
 
   const revealItems = document.querySelectorAll(".reveal");
@@ -263,13 +259,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   galleryItems.forEach((item, index) => {
     item.addEventListener("click", () => {
-      // Görseli olmayan (yer tutucu) kareler için boş lightbox açma
       if (item.querySelector(".is-empty")) return;
       openLightbox(index);
     });
   });
 
-  // Mobilde sağa/sola kaydırarak gezinme
   let touchStartX = null;
   lightbox?.addEventListener("touchstart", (event) => {
     touchStartX = event.changedTouches[0].clientX;
@@ -300,7 +294,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ========================================================
-  // RANDEVU MODALI: elementler
+  // RANDEVU MODALI
   // ========================================================
 
   const modal = document.getElementById("appointmentModal");
@@ -313,13 +307,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const serviceSelect = document.getElementById("service");
   const barberSelect = document.getElementById("barber");
 
-  const openButtons = document.querySelectorAll("[data-open-appointment]");
+  // Hem data niteliği olan hem de #randevu adresine giden butonları yakala
+  const openButtons = document.querySelectorAll("[data-open-appointment], a[href='#randevu']");
   const closeButtons = document.querySelectorAll("[data-close-appointment]");
 
   let lastFocusedElement = null;
 
   // ========================================================
-  // SAAT SEÇENEKLERİ (çalışma saatleri: 09:00–21:00)
+  // SAAT SEÇENEKLERİ (09:00–21:00)
   // ========================================================
 
   const timeSlots = [
@@ -398,7 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ========================================================
-  // MODAL AÇMA / KAPAMA (odak yönetimi ile)
+  // MODAL AÇMA / KAPAMA
   // ========================================================
 
   function getFocusableElements() {
@@ -415,7 +410,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     lastFocusedElement = document.activeElement;
 
-    // Servis/berber önseçimi (hizmet kartı veya ekip kartından açıldıysa)
     const presetService = trigger?.getAttribute?.("data-service");
     const presetBarber = trigger?.getAttribute?.("data-barber");
 
@@ -470,7 +464,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Basit odak tuzağı (focus trap)
     if (event.key === "Tab") {
       const focusable = getFocusableElements();
       if (!focusable.length) return;
@@ -493,7 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ========================================================
-  // FORM GÖNDERİMİ
+  // FORM GÖNDERİMİ (Vercel API + Telegram Entegrasyonu)
   // ========================================================
 
   function escapeHtml(value) {
@@ -542,22 +535,43 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Sunucuya gönder (sunucu doğrular, kaydeder ve Telegram bildirimi yollar)
-    const submitBtn = form.querySelector(".appointment-submit");
-    submitBtn.disabled = true; submitBtn.classList.add("is-loading");
+    // API'nin beklediği parametre isimlerine dönüştür (api/appointments.js ile tam uyumlu)
+    const payload = {
+      name: name,
+      phone: phone,
+      service: service,
+      barber: barber,
+      date: date,
+      time: time
+    };
+
+    const submitBtn = form.querySelector(".appointment-submit") || form.querySelector("button[type='submit']");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.classList.add("is-loading");
+    }
+
     try {
       const res = await fetch("/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(formData))
+        body: JSON.stringify(payload)
       });
+      
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { showError(data.error || "Randevu oluşturulamadı. Lütfen tekrar deneyin."); return; }
-    } catch {
+      
+      if (!res.ok) { 
+        showError(data.message || data.error || "Randevu oluşturulamadı. Lütfen tekrar deneyin."); 
+        return; 
+      }
+    } catch (err) {
       showError("Bağlantı hatası. Lütfen tekrar deneyin veya bizi arayın.");
       return;
     } finally {
-      submitBtn.disabled = false; submitBtn.classList.remove("is-loading");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove("is-loading");
+      }
     }
 
     if (summary) {
