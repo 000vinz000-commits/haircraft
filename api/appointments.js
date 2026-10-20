@@ -13,55 +13,67 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { name, phone, service, barber, date, time } = req.body || {};
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) { body = {}; }
+    }
+
+    const { name, phone, service, barber, date, time } = body || {};
 
     if (!name || !phone) {
       return res.status(400).json({ success: false, message: 'Lütfen ad ve telefon bilgilerini doldurun.' });
     }
 
-    const token = process.env.TELEGRAM_BOT_TOKEN;8986949547:AAEZx_UMFv2WZp_i3DrH5NeI6zhqjOkYHWM
-    const chatId = process.env.TELEGRAM_CHAT_ID;-5416001079
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
 
-    // Telegram Bildirim Mesajı
-    const message = 
-`💈 *YENİ RANDEVU TALEBİ!*
-
-👤 *Müşteri:* ${name}
-📞 *Telefon:* ${phone}
-✂️ *Hizmet:* ${service || 'Belirtilmedi'}
-👨‍🺰 *Berber:* ${barber || 'Farketmez'}
-📅 *Tarih:* ${date || 'Belirtilmedi'}
-⏰ *Saat:* ${time || 'Belirtilmedi'}`;
-
-    if (token && chatId) {
-      const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: 'Markdown'
-        })
+    if (!token || !chatId) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Vercel ortam değişkenleri (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID) okunamadı.' 
       });
+    }
 
-      const tgData = await tgRes.json();
+    // Düz metin mesajı (Markdown hatası riskini sıfırladık)
+    const message = 
+`💈 YENİ RANDEVU TALEBİ!
 
-      if (!tgRes.ok) {
-        console.error('Telegram API Error:', tgData);
-        return res.status(500).json({ 
-          success: false, 
-          message: `Telegram Hatası: ${tgData.description || 'Mesaj gönderilemedi.'}` 
-        });
-      }
+👤 Müşteri: ${name}
+📞 Telefon: ${phone}
+✂️ Hizmet: ${service || 'Belirtilmedi'}
+👨‍🺰 Berber: ${barber || 'Farketmez'}
+📅 Tarih: ${date || 'Belirtilmedi'}
+⏰ Saat: ${time || 'Belirtilmedi'}`;
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message
+      })
+    });
+
+    const tgData = await tgRes.json().catch(() => ({}));
+
+    if (!tgRes.ok) {
+      console.error('Telegram API Error:', tgData);
+      return res.status(500).json({ 
+        success: false, 
+        message: `Telegram Hatası (${tgRes.status}): ${tgData.description || 'Mesaj gönderilemedi.'}` 
+      });
     }
 
     return res.status(200).json({ 
       success: true, 
-      message: 'Randevunuz başarıyla oluşturuldu ve berberinize iletildi!' 
+      message: 'Randevunuz başarıyla oluşturuldu!' 
     });
 
   } catch (error) {
     console.error('API Error:', error);
-    return res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
+    return res.status(500).json({ 
+      success: false, 
+      message: `Sunucu Hatası: ${error.message || 'Bilinmeyen hata'}` 
+    });
   }
 };
