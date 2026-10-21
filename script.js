@@ -299,6 +299,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const modal = document.getElementById("appointmentModal");
   const form = document.getElementById("appointmentForm");
+  const branchSelectionView = document.getElementById("branchSelectionView");
+  const appointmentFormView = document.getElementById("appointmentFormView");
+  const appointmentSubtitle = document.getElementById("appointmentSubtitle");
+  const selectedBranchInput = document.getElementById("selectedBranchInput");
+  const displaySelectedBranch = document.getElementById("displaySelectedBranch");
+  const selectedHairstyleInput = document.getElementById("selectedHairstyleInput");
+  const selectedHairstyleInfo = document.getElementById("selectedHairstyleInfo");
+  const displaySelectedHairstyle = document.getElementById("displaySelectedHairstyle");
+  const clearHairstyleButton = document.getElementById("btnClearHairstyle");
+  const branchSelectButtons = document.querySelectorAll(".branch-select-btn");
+  const changeBranchButton = document.getElementById("btnChangeBranch");
   const successBox = document.getElementById("appointmentSuccess");
   const summary = document.getElementById("appointmentSummary");
 
@@ -309,9 +320,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Hem data niteliği olan hem de #randevu adresine giden butonları yakala
   const openButtons = document.querySelectorAll("[data-open-appointment], a[href='#randevu']");
+  const hairstyleSelectButtons = document.querySelectorAll("[data-hairstyle-select]");
   const closeButtons = document.querySelectorAll("[data-close-appointment]");
 
   let lastFocusedElement = null;
+
+  function setSelectedHairstyle(name) {
+    const selected = String(name || "").trim();
+    if (selectedHairstyleInput) selectedHairstyleInput.value = selected;
+    if (displaySelectedHairstyle) displaySelectedHairstyle.textContent = selected;
+    if (selectedHairstyleInfo) selectedHairstyleInfo.hidden = !selected;
+
+    document.querySelectorAll("[data-hairstyle]").forEach((card) => {
+      card.classList.toggle("is-selected", Boolean(selected) && card.getAttribute("data-hairstyle") === selected);
+    });
+    hairstyleSelectButtons.forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.getAttribute("data-hairstyle-select") === selected));
+    });
+  }
+
+  function showBranchSelection() {
+    if (branchSelectionView) branchSelectionView.style.display = "block";
+    if (appointmentFormView) appointmentFormView.style.display = "none";
+    if (appointmentSubtitle) appointmentSubtitle.textContent = "Lütfen randevu almak istediğiniz şubeyi seçin.";
+  }
+
+  function showAppointmentForm(branch) {
+    if (selectedBranchInput) selectedBranchInput.value = branch;
+    if (displaySelectedBranch) displaySelectedBranch.textContent = branch;
+    if (branchSelectionView) branchSelectionView.style.display = "none";
+    if (appointmentFormView) appointmentFormView.style.display = "block";
+    if (appointmentSubtitle) appointmentSubtitle.textContent = "Aşağıdaki adımları tamamlayın, size dönüş yapalım.";
+  }
 
   // ========================================================
   // SAAT SEÇENEKLERİ (09:00–21:00)
@@ -420,6 +460,8 @@ document.addEventListener("DOMContentLoaded", () => {
       barberSelect.value = presetBarber;
     }
 
+    showBranchSelection();
+
     modal.classList.add("is-open");
     modal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -447,6 +489,25 @@ document.addEventListener("DOMContentLoaded", () => {
       openModal(button);
     });
   });
+
+  hairstyleSelectButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setSelectedHairstyle(button.getAttribute("data-hairstyle-select"));
+      openModal(button);
+    });
+  });
+
+  clearHairstyleButton?.addEventListener("click", () => {
+    setSelectedHairstyle("");
+  });
+
+  branchSelectButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      showAppointmentForm(button.getAttribute("data-branch") || "");
+    });
+  });
+
+  changeBranchButton?.addEventListener("click", showBranchSelection);
 
   closeButtons.forEach((button) => {
     button.addEventListener("click", closeModal);
@@ -506,6 +567,8 @@ document.addEventListener("DOMContentLoaded", () => {
     showError("");
 
     const formData = new FormData(form);
+    const branch = formData.get("branch");
+    const hairstyle = formData.get("hairstyle") || "";
     const service = formData.get("service");
     const barber = formData.get("barber") || "Fark etmez";
     const date = formData.get("appointmentDate");
@@ -513,7 +576,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const name = formData.get("customerName");
     const phone = formData.get("customerPhone");
 
-    if (!service || !date || !time || !name || !phone) {
+    if (!branch || !service || !date || !time || !name || !phone) {
       showError("Lütfen zorunlu alanları doldurun.");
       return;
     }
@@ -540,9 +603,16 @@ document.addEventListener("DOMContentLoaded", () => {
       name: name,
       phone: phone,
       service: service,
+      hairstyle: hairstyle,
       barber: barber,
       date: date,
-      time: time
+      time: time,
+      branch: branch,
+      // Yerel Node API'sinin kullandığı alan adlarını da koru.
+      customerName: name,
+      customerPhone: phone,
+      appointmentDate: date,
+      appointmentTime: time
     };
 
     const submitBtn = form.querySelector(".appointment-submit") || form.querySelector("button[type='submit']");
@@ -577,6 +647,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (summary) {
       summary.innerHTML = `
         <div><strong>Hizmet:</strong> ${escapeHtml(service)}</div>
+        ${hairstyle ? `<div><strong>Stil:</strong> ${escapeHtml(hairstyle)}</div>` : ""}
+        <div><strong>Şube:</strong> ${escapeHtml(branch)}</div>
         <div><strong>Berber:</strong> ${escapeHtml(barber)}</div>
         <div><strong>Tarih:</strong> ${escapeHtml(getTurkishDate(date))}</div>
         <div><strong>Saat:</strong> ${escapeHtml(time)}</div>
@@ -591,6 +663,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   successBox?.querySelector("[data-close-appointment]")?.addEventListener("click", () => {
     form?.reset();
+    setSelectedHairstyle("");
+    showBranchSelection();
     resetTimeSelect("Önce tarih seçin");
     successBox.classList.remove("is-visible");
     if (form) form.style.display = "block";
