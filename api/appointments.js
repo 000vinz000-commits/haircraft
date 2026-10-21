@@ -76,7 +76,11 @@ async function rateLimit(req) {
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   // Vercel instance belleği global değildir; Upstash tanımlıysa tüm instance'lar ortak sayaç kullanır.
-  if (!redisUrl || !redisToken) return localRateLimit(key);
+  if (!redisUrl || !redisToken) {
+    return process.env.VERCEL === "1"
+      ? { limited: false, unavailable: true, distributed: false }
+      : localRateLimit(key);
+  }
 
   const redisKey = `haircraft:appointment-rate:${key.slice(0, 120)}`;
   try {
@@ -108,7 +112,9 @@ async function rateLimit(req) {
 
     return { limited: count > RATE_LIMIT, distributed: true };
   } catch {
-    // Harici sayaç geçici olarak erişilemezse isteği tamamen kırmadan instance fallback'i uygula.
+    if (process.env.VERCEL === "1") {
+      return { limited: false, unavailable: true, distributed: false };
+    }
     return localRateLimit(key);
   }
 }
@@ -216,6 +222,12 @@ module.exports = async function handler(req, res) {
   }
 
   const limit = await rateLimit(req);
+  if (limit.unavailable) {
+    return res.status(503).json({
+      success: false,
+      message: "Randevu servisi şu anda yapılandırılıyor. Lütfen daha sonra tekrar deneyin."
+    });
+  }
   res.setHeader("X-RateLimit-Policy", limit.distributed ? "upstash-shared" : "instance-best-effort");
   if (limit.limited) {
     res.setHeader("Retry-After", String(RATE_WINDOW_SECONDS));
