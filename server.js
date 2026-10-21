@@ -12,7 +12,9 @@ try {
 const PORT = process.env.PORT || 3000;
 const DB = path.join(__dirname, "data", "appointments.json");
 const SERVICES = ["Saç Kesimi", "Saç + Sakal", "Sakal Kesimi", "Damat Tıraşı"];
-const BARBERS = ["Adem Gezer", "Uğurcan", "Enes", "Ensar Gezer"];
+const BRANCHES = ["Çerkezköy", "Kapaklı"];
+const BARBERS = ["Adem Gezer", "Uğurcan Şefil", "Enes", "Ensar Gezer", "Şahin İstek", "Enes Soylu"];
+const HAIRSTYLES = ["Textured Crop", "Low Taper Fade", "Mid Skin Fade", "Classic Slick Back", "Modern Quiff", "Messy Fringe", "Buzz Cut", "Pompadour"];
 const SLOTS = []; for (let h = 9; h < 21; h++) SLOTS.push(`${String(h).padStart(2,"0")}:00`, `${String(h).padStart(2,"0")}:30`);
 const PUBLIC = new Set(["index.html","style.css","enhance.css","script.js","enhance.js"]);
 const MIME = { ".html":"text/html; charset=utf-8", ".css":"text/css; charset=utf-8", ".js":"text/javascript; charset=utf-8",
@@ -32,22 +34,30 @@ function limited(ip) {
 }
 
 function validate(b) {
-  const name = String(b.customerName || "").trim().replace(/\s+/g, " ");
-  const phone = String(b.customerPhone || "").trim();
+  const name = String(b.name || b.customerName || "").trim().replace(/\s+/g, " ");
+  const phone = String(b.phone || b.customerPhone || "").trim();
   const digits = phone.replace(/\D/g, "");
-  const service = String(b.service || ""), barber = String(b.barber || "");
-  const date = String(b.appointmentDate || ""), time = String(b.appointmentTime || "");
-  if (b.website) return { error: "Geçersiz istek." };                       // honeypot
+  const service = String(b.service || "").trim();
+  const branch = String(b.branch || "").trim();
+  const barber = String(b.barber || "").trim();
+  const hairstyle = String(b.hairstyle || "").trim();
+  const date = String(b.date || b.appointmentDate || "").trim();
+  const time = String(b.time || b.appointmentTime || "").trim();
+  if (b.website) return { error: "Geçersiz istek." };
   if (!SERVICES.includes(service)) return { error: "Lütfen bir hizmet seçin." };
-  if (barber && !BARBERS.includes(barber)) return { error: "Geçersiz berber seçimi." };
+  if (!BRANCHES.includes(branch)) return { error: "Lütfen bir şube seçin." };
+  if (barber && barber !== "Fark etmez" && !BARBERS.includes(barber)) return { error: "Geçersiz berber seçimi." };
+  if (hairstyle && !HAIRSTYLES.includes(hairstyle)) return { error: "Geçersiz stil seçimi." };
   if (name.length < 2 || name.length > 60) return { error: "Lütfen adınızı ve soyadınızı girin." };
   if (digits.length < 10 || digits.length > 13 || phone.length > 20) return { error: "Lütfen geçerli bir telefon numarası girin." };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(new Date(date + "T00:00:00"))) return { error: "Geçerli bir tarih seçin." };
-  if (new Date(date + "T00:00:00").getDay() === 0) return { error: "Pazar günü salonumuz kapalıdır." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Geçerli bir tarih seçin." };
+  const selectedDate = new Date(date + "T00:00:00");
+  if (Number.isNaN(selectedDate.getTime()) || selectedDate.toISOString().slice(0, 10) !== date) return { error: "Geçerli bir tarih seçin." };
+  if (selectedDate.getDay() === 0) return { error: "Pazar günü salonumuz kapalıdır." };
   if (!SLOTS.includes(time)) return { error: "Geçerli bir saat seçin." };
   const now = new Date();
   if (date < ymd(now) || (date === ymd(now) && time <= now.toTimeString().slice(0, 5))) return { error: "Geçmiş bir zaman seçemezsiniz." };
-  return { data: { service, barber, date, time, name, phone } };
+  return { data: { service, branch, barber: barber || "Fark etmez", hairstyle, date, time, name, phone } };
 }
 
 async function notifyTelegram(a) {
@@ -55,7 +65,7 @@ async function notifyTelegram(a) {
   if (!token || !chat || token.startsWith("YOUR_")) { console.warn("[telegram] atlandı: env değişkenleri tanımlı değil"); return; }
   const day = new Intl.DateTimeFormat("tr-TR", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }).format(new Date(a.date + "T00:00:00"));
   const text = ["━━━━━━━━━━━━━━━━","🔔 <b>YENİ RANDEVU</b>","━━━━━━━━━━━━━━━━","",
-    `👤 <b>Müşteri:</b>\n${esc(a.name)}`, `📞 <b>Telefon:</b>\n${esc(a.phone)}`, `💈 <b>Hizmet:</b>\n${esc(a.service)}`,
+    `👤 <b>Müşteri:</b>\n${esc(a.name)}`, `📞 <b>Telefon:</b>\n${esc(a.phone)}`, `📍 <b>Şube:</b>\n${esc(a.branch)}`, `💈 <b>Hizmet:</b>\n${esc(a.service)}`, `💇 <b>Stil:</b>\n${esc(a.hairstyle || "Belirtilmedi")}`,
     `✂️ <b>Berber:</b>\n${esc(a.barber || "Fark etmez")}`, `📅 <b>Tarih:</b>\n${esc(day)}`, `⏰ <b>Saat:</b>\n${esc(a.time)}`,
     "","━━━━━━━━━━━━━━━━","🌐 Web Sitesi Randevusu","━━━━━━━━━━━━━━━━"].join("\n");
   try {
@@ -80,7 +90,7 @@ async function handleApi(req, res, url) {
     const v = validate(body || {});
     if (v.error) return send(res, 400, { error: v.error });
     const a = v.data, rows = readDb();
-    if (a.barber && rows.some(r => r.date === a.date && r.time === a.time && r.barber === a.barber))
+    if (a.barber && rows.some(r => r.date === a.date && r.time === a.time && r.branch === a.branch && r.barber === a.barber))
       return send(res, 409, { error: "Bu saat dolu. Lütfen başka bir saat seçin." });
     writeDb([...rows, { id: Date.now().toString(36), ...a, createdAt: new Date().toISOString() }]);
     send(res, 201, { ok: true });          // kayıt başarılı → kullanıcıya hemen yanıt
