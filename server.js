@@ -51,8 +51,12 @@ function validate(b) {
   if (name.length < 2 || name.length > 60) return { error: "Lütfen adınızı ve soyadınızı girin." };
   if (digits.length < 10 || digits.length > 13 || phone.length > 20) return { error: "Lütfen geçerli bir telefon numarası girin." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Geçerli bir tarih seçin." };
-  const selectedDate = new Date(date + "T00:00:00");
-  if (Number.isNaN(selectedDate.getTime()) || selectedDate.toISOString().slice(0, 10) !== date) return { error: "Geçerli bir tarih seçin." };
+  const [year, month, day] = date.split("-").map(Number);
+  const selectedDate = new Date(year, month - 1, day);
+  if (Number.isNaN(selectedDate.getTime()) ||
+      selectedDate.getFullYear() !== year ||
+      selectedDate.getMonth() !== month - 1 ||
+      selectedDate.getDate() !== day) return { error: "Geçerli bir tarih seçin." };
   if (selectedDate.getDay() === 0) return { error: "Pazar günü salonumuz kapalıdır." };
   if (!SLOTS.includes(time)) return { error: "Geçerli bir saat seçin." };
   const now = new Date();
