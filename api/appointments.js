@@ -113,15 +113,17 @@ async function rateLimit(req) {
   }
 }
 
-function clean(value, maxLength) {
-  return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, maxLength);
+function clean(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
 }
 
 function isValidDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return false;
-  return date.toISOString().slice(0, 10) === value;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day;
 }
 
 function isPastDateTime(date, time) {
@@ -130,19 +132,22 @@ function isPastDateTime(date, time) {
 }
 
 function validate(body) {
-  const name = clean(body.name ?? body.customerName, 60);
-  const phone = clean(body.phone ?? body.customerPhone, 20);
-  const service = clean(body.service, 40);
-  const branch = clean(body.branch, 40);
-  const barber = clean(body.barber, 60);
-  const hairstyle = clean(body.hairstyle, 60);
-  const date = clean(body.date ?? body.appointmentDate, 10);
-  const time = clean(body.time ?? body.appointmentTime, 5);
+  const name = clean(body.name ?? body.customerName);
+  const phone = clean(body.phone ?? body.customerPhone);
+  const service = clean(body.service);
+  const branch = clean(body.branch);
+  const barber = clean(body.barber);
+  const hairstyle = clean(body.hairstyle);
+  const date = clean(body.date ?? body.appointmentDate);
+  const time = clean(body.time ?? body.appointmentTime);
   const phoneDigits = phone.replace(/\D/g, "");
 
   if (body.website) return { error: "Geçersiz istek." };
-  if (name.length < 2 || !phone || phone.length > 20 || phoneDigits.length < 10 || phoneDigits.length > 13) {
+  if (name.length < 2 || name.length > 60 || !phone || phone.length > 20 || phoneDigits.length < 10 || phoneDigits.length > 13) {
     return { error: "Lütfen geçerli ad ve telefon bilgilerini girin." };
+  }
+  if (service.length > 40 || branch.length > 40 || barber.length > 60 || hairstyle.length > 60) {
+    return { error: "Form alanlarından biri çok uzun." };
   }
   if (!SERVICES.has(service)) return { error: "Geçerli bir hizmet seçin." };
   if (!BRANCHES.has(branch)) return { error: "Geçerli bir şube seçin." };
