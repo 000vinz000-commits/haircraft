@@ -184,7 +184,7 @@ function validate(body) {
 async function notifyTelegram(appointment) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId || token.startsWith("YOUR_")) return;
+  if (!token || !chatId || token.startsWith("YOUR_")) return false;
 
   const message = [
     "💈 YENİ RANDEVU TALEBİ!",
@@ -200,14 +200,16 @@ async function notifyTelegram(appointment) {
   ].join("\n");
 
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text: message }),
       signal: AbortSignal.timeout(8000)
     });
+    return response.ok;
   } catch {
     // Telegram sonucu istemciye hassas hata ayrıntılarıyla açılmaz.
+    return false;
   }
 }
 
@@ -248,7 +250,13 @@ module.exports = async function handler(req, res) {
     const result = validate(body || {});
     if (result.error) return res.status(400).json({ success: false, message: result.error });
 
-    await notifyTelegram(result.data);
+    const notified = await notifyTelegram(result.data);
+    if (!notified) {
+      return res.status(503).json({
+        success: false,
+        message: "Randevu bildirimi şu anda iletilemedi. Lütfen daha sonra tekrar deneyin."
+      });
+    }
     return res.status(200).json({
       success: true,
       message: "Randevu talebiniz işletmeye iletildi. Kesin onay için şube sizinle iletişime geçecektir."
